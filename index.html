@@ -4,107 +4,68 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Live Scanner Angka ke Sheets</title>
-  <!-- Menggunakan CDN Tesseract.js Versi Terbaru -->
-  <script src="https://jsdelivr.net"></script>
   <style>
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; margin: 0; padding: 20px; background-color: #f0f2f5; }
     .container { max-width: 450px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
     video { width: 100%; border: 3px solid #007bff; border-radius: 8px; background-color: #000; }
-    button { width: 100%; padding: 14px; font-size: 16px; font-weight: bold; margin-top: 15px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 8px; transition: background 0.2s; }
-    button:disabled { background-color: #cccccc; cursor: not-allowed; }
-    #status { margin-top: 15px; font-weight: bold; font-size: 15px; color: #333; min-height: 40px; line-height: 1.4; }
+    button { width: 100%; padding: 14px; font-size: 16px; font-weight: bold; margin-top: 15px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 8px; }
+    button:disabled { background-color: #cccccc; }
+    #status { margin-top: 15px; font-weight: bold; font-size: 15px; color: #333; min-height: 40px; }
   </style>
 </head>
 <body>
 
 <div class="container">
   <h2>Live Scanner Angka</h2>
-  <p style="color: #666; font-size: 14px; margin-top: -10px;">Posisikan angka di tengah kamera dengan dekat dan jelas.</p>
+  <p style="color: #666; font-size: 14px; margin-top: -10px;">Arahkan kamera dengan dekat & tegak, lalu klik tombol.</p>
   
   <video id="video" autoplay playsinline></video>
-  
   <button id="scanBtn">PINDAI ANGKA (LIVE)</button>
-  
-  <div id="status">Kamera aktif. Siap memindai...</div>
+  <div id="status">Kamera siap.</div>
   
   <canvas id="canvas" style="display:none;"></canvas>
 </div>
 
 <script>
   // GANTI URL DI BAWAH INI DENGAN URL WEB APP GOOGLE APPS SCRIPT ANDA
-  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxX7_tzNfhE8k9HimqoSZUuzUmlnCSIEjKc_reuGEbl5d4x_L8tnDBANBuWw4uFZkyp/exec";
+  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzgnUbw1IHRp2r8fJTEAUAKqqO_0hml32ELTLpSS1UplQmr5-fImaP4l5hbK3Ht1yWM/exec";
 
   const video = document.getElementById('video');
   const scanBtn = document.getElementById('scanBtn');
   const statusDiv = document.getElementById('status');
   const canvas = document.getElementById('canvas');
 
-  // 1. Mengakses kamera belakang HP secara langsung
   navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-    .then(stream => { 
-      video.srcObject = stream; 
-    })
-    .catch(err => { 
-      statusDiv.innerHTML = "<span style='color: red;'>Gagal akses kamera. Pastikan menggunakan HTTPS.</span>";
-      console.error(err);
-    });
+    .then(stream => { video.srcObject = stream; })
+    .catch(err => { statusDiv.innerHTML = "<span style='color: red;'>Gagal akses kamera.</span>"; });
 
-  // 2. Logika ketika tombol Scan diklik
   scanBtn.addEventListener('click', () => {
     scanBtn.disabled = true;
-    statusDiv.innerHTML = "<span style='color: orange;'>Menangkap gambar...</span>";
+    statusDiv.innerHTML = "<span style='color: orange;'>Mengirim foto ke Google Cloud...</span>";
     
     const context = canvas.getContext('2d');
-    
-    // Mengecilkan resolusi canvas ke ukuran optimal (max 640px) agar proses OCR instan dan tidak lag/stuck
-    const scale = Math.min(640 / video.videoWidth, 1);
-    canvas.width = video.videoWidth * scale;
-    canvas.height = video.videoHeight * scale;
-    
-    // Menggambar ulang frame video ke ukuran yang lebih ringan
+    // Atur resolusi foto standar biar uploadnya secepat kilat
+    canvas.width = 640;
+    canvas.height = (video.videoHeight / video.videoWidth) * 640;
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
     const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
     
-    statusDiv.innerHTML = "<span style='color: orange;'>Membaca angka (OCR)...</span>";
-    
-    // 3. Menggunakan pemanggilan Tesseract global langsung (Anti-Stuck)
-    Tesseract.recognize(
-      dataUrl,
-      'eng',
-      { logger: m => console.log(m) } // Memantau proses di console log browser
-    ).then(({ data: { text } }) => {
-      // Membersihkan teks: ambil karakter angka saja menggunakan Regex
-      let angkaHasil = text.replace(/[^0-9]/g, '').trim();
-      
-      if (angkaHasil === "") {
-        statusDiv.innerHTML = "<span style='color: red;'>Angka tidak terbaca. Dekatkan kamera ke objek tulisan.</span>";
-        scanBtn.disabled = false;
-        return;
-      }
-      
-      statusDiv.innerHTML = `<span style='color: #007bff;'>Mengirim data (${angkaHasil}) ke Google Sheets...</span>`;
-      
-      // 4. Mengirim data ke Google Apps Script backend
-      fetch(GOOGLE_SCRIPT_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ angka: angkaHasil })
-      })
-      .then(() => {
-        statusDiv.innerHTML = `<span style='color: green;'>✔ Berhasil mengirim angka: <strong>${angkaHasil}</strong></span>`;
-        scanBtn.disabled = false;
-      })
-      .catch(err => {
-        statusDiv.innerHTML = "<span style='color: red;'>Gagal mengirim data ke Google Sheets.</span>";
-        scanBtn.disabled = false;
-        console.error(err);
-      });
-        
-    }).catch(err => {
-      statusDiv.innerHTML = "<span style='color: red;'>Terjadi kesalahan sistem OCR.</span>";
+    // Kirim gambar murni ke Google Apps Script
+    fetch(GOOGLE_SCRIPT_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: dataUrl })
+    })
+    .then(() => {
+      statusDiv.innerHTML = "<span style='color: green;'>✔ Terkirim! Memproses angka di Google Sheets...</span>";
+      // Beri jeda 3 detik agar tombol bisa digunakan kembali
+      setTimeout(() => { scanBtn.disabled = false; statusDiv.innerHTML = "Kamera siap kembali."; }, 3000);
+    })
+    .catch(err => {
+      statusDiv.innerHTML = "<span style='color: red;'>Gagal mengirim gambar.</span>";
       scanBtn.disabled = false;
-      console.error(err);
     });
   });
 </script>
