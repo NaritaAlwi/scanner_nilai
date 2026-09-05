@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Live Scanner Angka ke Sheets</title>
-  <!-- Menggunakan CDN Tesseract.js versi stabil -->
+  <!-- Menggunakan CDN Tesseract.js Versi Terbaru -->
   <script src="https://jsdelivr.net"></script>
   <style>
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; margin: 0; padding: 20px; background-color: #f0f2f5; }
@@ -19,87 +19,72 @@
 
 <div class="container">
   <h2>Live Scanner Angka</h2>
-  <p style="color: #666; font-size: 14px; margin-top: -10px;">Arahkan kamera ke angka secara dekat & tegak, lalu klik scan.</p>
+  <p style="color: #666; font-size: 14px; margin-top: -10px;">Posisikan angka di tengah kamera dengan dekat dan jelas.</p>
   
   <video id="video" autoplay playsinline></video>
   
-  <button id="scanBtn" disabled>MENGINISIALISASI OCR...</button>
+  <button id="scanBtn">PINDAI ANGKA (LIVE)</button>
   
-  <div id="status">Menyiapkan sistem pembaca angka...</div>
+  <div id="status">Kamera aktif. Siap memindai...</div>
   
   <canvas id="canvas" style="display:none;"></canvas>
 </div>
 
 <script>
   // GANTI URL DI BAWAH INI DENGAN URL WEB APP GOOGLE APPS SCRIPT ANDA
-  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzEqrRL0mHYrqh6VtBNrNCWqGgIt7foqK5CHIkTHSzXU5MG1wW7e3epol1HNdEp3BVr/exec";
+  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxX7_tzNfhE8k9HimqoSZUuzUmlnCSIEjKc_reuGEbl5d4x_L8tnDBANBuWw4uFZkyp/exec";
 
   const video = document.getElementById('video');
   const scanBtn = document.getElementById('scanBtn');
   const statusDiv = document.getElementById('status');
   const canvas = document.getElementById('canvas');
-  
-  let ocrWorker = null;
 
-  // 1. Inisialisasi Tesseract Worker di awal agar saat tombol ditekan tidak perlu loading mengunduh data lagi
-  async function initOCR() {
-    try {
-      statusDiv.innerHTML = "<span style='color: orange;'>Memuat modul AI scanner...</span>";
-      ocrWorker = await Tesseract.createWorker('eng');
-      
-      // Mengatur agar modul hanya mengenali karakter angka 0-9
-      await ocrWorker.setParameters({
-        tessedit_char_whitelist: '0123456789',
-      });
-      
-      statusDiv.innerHTML = "<span style='color: green;'>Sistem scanner siap!</span>";
-      scanBtn.disabled = false;
-      scanBtn.innerText = "PINDAI ANGKA (LIVE)";
-    } catch (err) {
-      statusDiv.innerHTML = "<span style='color: red;'>Gagal memuat modul OCR. Periksa koneksi internet Anda.</span>";
-      console.error(err);
-    }
-  }
-
-  // 2. Mengakses kamera belakang HP secara live
+  // 1. Mengakses kamera belakang HP secara langsung
   navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
     .then(stream => { 
       video.srcObject = stream; 
-      initOCR(); // Jalankan inisialisasi OCR setelah kamera aktif
     })
     .catch(err => { 
-      statusDiv.innerHTML = "<span style='color: red;'>Gagal akses kamera. Pastikan menggunakan HTTPS di HP.</span>";
+      statusDiv.innerHTML = "<span style='color: red;'>Gagal akses kamera. Pastikan menggunakan HTTPS.</span>";
       console.error(err);
     });
 
-  // 3. Logika pemindaian gambar ketika tombol diklik
-  scanBtn.addEventListener('click', async () => {
-    if (!ocrWorker) return;
-    
+  // 2. Logika ketika tombol Scan diklik
+  scanBtn.addEventListener('click', () => {
     scanBtn.disabled = true;
-    statusDiv.innerHTML = "<span style='color: orange;'>Menangkap gambar & memproses angka...</span>";
+    statusDiv.innerHTML = "<span style='color: orange;'>Menangkap gambar...</span>";
     
     const context = canvas.getContext('2d');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    
+    // Mengecilkan resolusi canvas ke ukuran optimal (max 640px) agar proses OCR instan dan tidak lag/stuck
+    const scale = Math.min(640 / video.videoWidth, 1);
+    canvas.width = video.videoWidth * scale;
+    canvas.height = video.videoHeight * scale;
+    
+    // Menggambar ulang frame video ke ukuran yang lebih ringan
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
     
-    const dataUrl = canvas.toDataURL('image/jpeg');
+    statusDiv.innerHTML = "<span style='color: orange;'>Membaca angka (OCR)...</span>";
     
-    try {
-      // Memproses gambar menggunakan worker yang sudah siap di memori browser
-      const { data: { text } } = await ocrWorker.recognize(dataUrl);
-      let angkaHasil = text.trim();
+    // 3. Menggunakan pemanggilan Tesseract global langsung (Anti-Stuck)
+    Tesseract.recognize(
+      dataUrl,
+      'eng',
+      { logger: m => console.log(m) } // Memantau proses di console log browser
+    ).then(({ data: { text } }) => {
+      // Membersihkan teks: ambil karakter angka saja menggunakan Regex
+      let angkaHasil = text.replace(/[^0-9]/g, '').trim();
       
       if (angkaHasil === "") {
-        statusDiv.innerHTML = "<span style='color: red;'>Angka tidak terdeteksi. Dekatkan kamera ke objek dan pastikan tidak blur.</span>";
+        statusDiv.innerHTML = "<span style='color: red;'>Angka tidak terbaca. Dekatkan kamera ke objek tulisan.</span>";
         scanBtn.disabled = false;
         return;
       }
       
       statusDiv.innerHTML = `<span style='color: #007bff;'>Mengirim data (${angkaHasil}) ke Google Sheets...</span>`;
       
-      // Mengirim data hasil pembacaan ke Google Apps Script backend
+      // 4. Mengirim data ke Google Apps Script backend
       fetch(GOOGLE_SCRIPT_URL, {
         method: "POST",
         mode: "no-cors",
@@ -116,11 +101,11 @@
         console.error(err);
       });
         
-    } catch (err) {
-      statusDiv.innerHTML = "<span style='color: red;'>Terjadi kesalahan saat membaca gambar.</span>";
+    }).catch(err => {
+      statusDiv.innerHTML = "<span style='color: red;'>Terjadi kesalahan sistem OCR.</span>";
       scanBtn.disabled = false;
       console.error(err);
-    }
+    });
   });
 </script>
 
