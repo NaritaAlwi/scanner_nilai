@@ -28,7 +28,7 @@
 
 <script>
   // GANTI URL DI BAWAH INI DENGAN URL WEB APP GOOGLE APPS SCRIPT ANDA
-  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwT7j040eAQlOFVbnM24xKuPiUawmfdY2Ut11ZFj3alh9jYure0dIkfK9rBrKdeoWSH/exec";
+  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxLGjWFGv_q-pVAsYnGP524smX62kGGt3X2NNg_PtnSttZ5KUUEHhpYB5K0kUjyi6ei/exec";
 
   const video = document.getElementById('video');
   const scanBtn = document.getElementById('scanBtn');
@@ -44,14 +44,15 @@
     statusDiv.innerHTML = "<span style='color: orange;'>Mengirim foto ke Google Cloud...</span>";
     
     const context = canvas.getContext('2d');
-    // Atur resolusi foto standar biar uploadnya secepat kilat
+    
+    // Set resolusi gambar yang optimal untuk dikirim lewat jaringan seluler HP
     canvas.width = 640;
     canvas.height = (video.videoHeight / video.videoWidth) * 640;
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
     
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    // Mengekstrak data gambar dengan kompresi kualitas 0.75 agar pengiriman instan
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
     
-    // Kirim gambar murni ke Google Apps Script
     fetch(GOOGLE_SCRIPT_URL, {
       method: "POST",
       mode: "no-cors",
@@ -60,8 +61,7 @@
     })
     .then(() => {
       statusDiv.innerHTML = "<span style='color: green;'>✔ Terkirim! Memproses angka di Google Sheets...</span>";
-      // Beri jeda 3 detik agar tombol bisa digunakan kembali
-      setTimeout(() => { scanBtn.disabled = false; statusDiv.innerHTML = "Kamera siap kembali."; }, 3000);
+      setTimeout(() => { scanBtn.disabled = false; statusDiv.innerHTML = "Kamera siap kembali."; }, 2000);
     })
     .catch(err => {
       statusDiv.innerHTML = "<span style='color: red;'>Gagal mengirim gambar.</span>";
