@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Scanner Angka ke Sheets</title>
+  <!-- Library OCR Tesseract.js -->
+  <script src="https://jsdelivr.net"></script>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; margin: 0; padding: 20px; background-color: #f0f2f5; }
+    .container { max-width: 450px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    video { width: 100%; border: 3px solid #007bff; border-radius: 8px; background-color: #000; }
+    button { width: 100%; padding: 14px; font-size: 16px; font-weight: bold; margin-top: 15px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 8px; transition: background 0.2s; }
+    button:hover { background-color: #0056b3; }
+    #status { margin-top: 15px; font-weight: bold; font-size: 15px; color: #333; min-height: 40px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>Live Scanner Angka</h2>
+  <p style="color: #666; font-size: 14px; margin-top: -10px;">Arahkan kamera ke angka, lalu klik scan.</p>
+  
+  <!-- Video stream kamera live -->
+  <video id="video" autoplay playsinline></video>
+  
+  <button id="scanBtn">PINDAI ANGKA (LIVE)</button>
+  
+  <div id="status">Menginisialisasi kamera...</div>
+  
+  <!-- Canvas tersembunyi untuk memproses frame video -->
+  <canvas id="canvas" style="display:none;"></canvas>
+</div>
+
+<script>
+  // GANTI URL DI BAWAH INI DENGAN URL WEB APP GOOGLE APPS SCRIPT ANDA
+  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxWy1_ANH1LQMevP3ekqzQHRbfltWaFssrZ4BIV_u4NrPmQvjNgGjbLQoIEJusFRmE1/exec";
+
+  const video = document.getElementById('video');
+  const scanBtn = document.getElementById('scanBtn');
+  const statusDiv = document.getElementById('status');
+  const canvas = document.getElementById('canvas');
+
+  // 1. Mengakses kamera belakang HP secara langsung
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+    .then(stream => { 
+      video.srcObject = stream; 
+      statusDiv.innerHTML = "<span style='color: green;'>Kamera siap!</span>";
+    })
+    .catch(err => { 
+      statusDiv.innerHTML = "<span style='color: red;'>Gagal akses kamera. Pastikan memberikan izin HTTPS.</span>";
+      console.error(err);
+    });
+
+  // 2. Logika ketika tombol Scan diklik
+  scanBtn.addEventListener('click', () => {
+    statusDiv.innerHTML = "<span style='color: orange;'>Menangkap frame gambar...</span>";
+    
+    const context = canvas.getContext('2d');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    // Mengambil frame gambar saat ini dari video stream
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg');
+    
+    statusDiv.innerHTML = "<span style='color: orange;'>Membaca angka (OCR)...</span>";
+    
+    // Menjalankan OCR Tesseract.js khusus angka
+    Tesseract.recognize(
+      dataUrl,
+      'eng',
+      { 
+        tessedit_char_whitelist: '0123456789', // Hanya deteksi angka
+        logger: m => console.log(m)
+      }
+    ).then(({ data: { text } }) => {
+      let angkaHasil = text.trim();
+      
+      if (angkaHasil === "") {
+        statusDiv.innerHTML = "<span style='color: red;'>Angka tidak terdeteksi. Pastikan tulisan tegak & fokus.</span>";
+        return;
+      }
+      
+      statusDiv.innerHTML = `<span style='color: #007bff;'>Mengirim data (${angkaHasil}) ke Google Sheets...</span>`;
+      
+      // 3. Mengirim data ke Google Apps Script menggunakan Fetch API
+      fetch(GOOGLE_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors", // Mode no-cors wajib digunakan untuk request silang ke domain Google
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ angka: angkaHasil })
+      })
+      .then(() => {
+        // Karena menggunakan mode "no-cors", kita berasumsi sukses jika tidak ada error jaringan
+        statusDiv.innerHTML = `<span style='color: green;'>✔ Berhasil mengirim: <strong>${angkaHasil}</strong></span>`;
+      })
+      .catch(err => {
+        statusDiv.innerHTML = "<span style='color: red;'>Gagal mengirim data ke server.</span>";
+        console.error(err);
+      });
+        
+    }).catch(err => {
+      statusDiv.innerHTML = "<span style='color: red;'>Terjadi kesalahan pada sistem OCR.</span>";
+      console.error(err);
+    });
+  });
+</script>
+
+</body>
+</html>
