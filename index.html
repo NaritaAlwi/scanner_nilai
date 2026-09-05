@@ -17,18 +17,18 @@
 
 <div class="container">
   <h2>Live Scanner Angka</h2>
-  <p style="color: #666; font-size: 14px; margin-top: -10px;">Arahkan kamera dengan dekat & tegak, lalu klik tombol.</p>
+  <p style="color: #666; font-size: 14px; margin-top: -10px;">Posisikan angka di tengah kamera secara dekat & jelas, lalu klik tombol.</p>
   
   <video id="video" autoplay playsinline></video>
   <button id="scanBtn">PINDAI ANGKA (LIVE)</button>
-  <div id="status">Kamera siap.</div>
+  <div id="status">Kamera aktif. Siap memindai...</div>
   
   <canvas id="canvas" style="display:none;"></canvas>
 </div>
 
 <script>
   // GANTI URL DI BAWAH INI DENGAN URL WEB APP GOOGLE APPS SCRIPT ANDA
-  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwlUTkMrLVAmYKkFlCnfvXucEvB7VL5InkLdvlKD9AbEiyT_SIg3apLKAhq-KpcoD9L/exec";
+  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyXIJ86GL9kmAYBqqPqEnikocJ883lpHHBDC2PguBx82LTTjDYzGIcGOAW0VRJKXMsL/exec";
 
   const video = document.getElementById('video');
   const scanBtn = document.getElementById('scanBtn');
@@ -37,7 +37,7 @@
 
   navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
     .then(stream => { video.srcObject = stream; })
-    .catch(err => { statusDiv.innerHTML = "<span style='color: red;'>Gagal akses kamera.</span>"; });
+    .catch(err => { statusDiv.innerHTML = "<span style='color: red;'>Gagal akses kamera. Pastikan memberikan izin.</span>"; });
 
   scanBtn.addEventListener('click', () => {
     scanBtn.disabled = true;
@@ -45,26 +45,26 @@
     
     const context = canvas.getContext('2d');
     
-    // Set resolusi gambar yang optimal untuk dikirim lewat jaringan seluler HP
+    // Mengompres ukuran canvas agar proses upload gambar dari HP instan tanpa lag
     canvas.width = 640;
     canvas.height = (video.videoHeight / video.videoWidth) * 640;
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
     
-    // Mengekstrak data gambar dengan kompresi kualitas 0.75 agar pengiriman instan
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
     
+    // Perubahan krusial: mengirim data gambar sebagai struktur teks text/plain mentah
+    // Cara ini memaksa bypass CORS sehingga properti postData di Google Apps Script tidak akan kosong lagi
     fetch(GOOGLE_SCRIPT_URL, {
       method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/plain" },
       body: JSON.stringify({ image: dataUrl })
     })
     .then(() => {
-      statusDiv.innerHTML = "<span style='color: green;'>✔ Terkirim! Memproses angka di Google Sheets...</span>";
-      setTimeout(() => { scanBtn.disabled = false; statusDiv.innerHTML = "Kamera siap kembali."; }, 2000);
+      statusDiv.innerHTML = "<span style='color: green;'>✔ Sukses! Data dikirim. Memproses angka di Google Sheets...</span>";
+      setTimeout(() => { scanBtn.disabled = false; statusDiv.innerHTML = "Kamera siap kembali."; }, 2500);
     })
     .catch(err => {
-      statusDiv.innerHTML = "<span style='color: red;'>Gagal mengirim gambar.</span>";
+      statusDiv.innerHTML = "<span style='color: red;'>Gagal mengirim gambar. Periksa koneksi internet Anda.</span>";
       scanBtn.disabled = false;
     });
   });
